@@ -522,36 +522,47 @@ const db = {
 
   // ── MEMBERSHIPS ───────────────────────────
   async upsertMembership(studentId, tierId) {
-    const { error } = await supabase
+    console.log("[db] upsertMembership", { studentId, tierId });
+    const { data, error } = await supabase
       .from("memberships")
-      .upsert({ student_id: studentId, tier_id: tierId, active_week_entries: 0, week_start: getWeekStart() }, { onConflict: "student_id" });
+      .upsert({ student_id: studentId, tier_id: tierId, active_week_entries: 0, week_start: getWeekStart() }, { onConflict: "student_id" })
+      .select();
+    console.log("[db] upsertMembership result", { data, error });
     if (error) throw error;
   },
 
   async removeMembership(studentId) {
-    await supabase.from("memberships").delete().eq("student_id", studentId);
+    const { error } = await supabase.from("memberships").delete().eq("student_id", studentId);
+    if (error) throw error;
   },
 
   async incrementWeekEntry(studentId, newCount) {
-    await supabase.from("memberships").update({ active_week_entries: newCount }).eq("student_id", studentId);
+    const { error } = await supabase.from("memberships").update({ active_week_entries: newCount }).eq("student_id", studentId);
+    if (error) throw error;
   },
 
   async resetWeekIfNeeded(student) {
     if (student.membership && isNewWeek(student.membership.weekStart)) {
-      await supabase.from("memberships").update({ active_week_entries: 0, week_start: getWeekStart() }).eq("student_id", student.id);
+      const { error } = await supabase.from("memberships").update({ active_week_entries: 0, week_start: getWeekStart() }).eq("student_id", student.id);
+      if (error) throw error;
     }
   },
 
   // ── PUNCH CARDS ───────────────────────────
   async upsertPunchCard(studentId, balance) {
-    const { error } = await supabase
+    console.log("[db] upsertPunchCard", { studentId, balance });
+    const { data, error } = await supabase
       .from("punch_cards")
-      .upsert({ student_id: studentId, balance }, { onConflict: "student_id" });
+      .upsert({ student_id: studentId, balance }, { onConflict: "student_id" })
+      .select();
+    console.log("[db] upsertPunchCard result", { data, error });
     if (error) throw error;
   },
 
   async updatePunchBalance(studentId, newBalance) {
-    await supabase.from("punch_cards").update({ balance: newBalance }).eq("student_id", studentId);
+    const { data, error } = await supabase.from("punch_cards").update({ balance: newBalance }).eq("student_id", studentId).select();
+    console.log("[db] updatePunchBalance result", { data, error });
+    if (error) throw error;
   },
 
   async logPunchHistory(studentId, delta, note) {
@@ -863,6 +874,7 @@ function AdminDashboard({ user }) {
   const [search, setSearch]           = useState("");
   const [dataLoading, setDataLoading] = useState(true);
   const [dataErr, setDataErr]         = useState("");
+  const [writeErr, setWriteErr]       = useState("");
   const [lang, setLang]               = useState(() => localStorage.getItem("st_lang") || "en");
 
   const toggleLang = (l) => { setLang(l); localStorage.setItem("st_lang", l); };
@@ -872,6 +884,12 @@ function AdminDashboard({ user }) {
     catch (e) { setDataErr(e.message); }
     finally { setDataLoading(false); }
   }, []);
+
+  // Wrap any async fn — catches errors and shows them visibly
+  const safe = (fn) => async (...args) => {
+    try { setWriteErr(""); return await fn(...args); }
+    catch (e) { console.error("[safe]", e); setWriteErr(e?.message || String(e)); }
+  };
 
   useEffect(() => { load(); }, [load]);
 
@@ -939,7 +957,10 @@ function AdminDashboard({ user }) {
 
   // ── ADD PUNCHES ──
   async function addPunches(studentId, cardId) {
+    console.log("[addPunches]", { studentId, cardId, cardOptions });
     const opt     = cardOptions.find(o => o.id === cardId);
+    console.log("[addPunches] opt found:", opt);
+    if (!opt) throw new Error(`No card option found for id "${cardId}". Available: ${cardOptions.map(o => o.id).join(", ")}`);
     const student = students.find(s => s.id === studentId);
     const newBal  = (student?.punchCard?.balance || 0) + opt.punches;
     await db.upsertPunchCard(studentId, newBal);
@@ -949,6 +970,7 @@ function AdminDashboard({ user }) {
 
   // ── SET MEMBERSHIP ──
   async function setMembership(studentId, tierId) {
+    console.log("[setMembership]", { studentId, tierId });
     await db.upsertMembership(studentId, tierId);
     await load();
   }
@@ -971,10 +993,14 @@ function AdminDashboard({ user }) {
 
   // ── ADD STUDENT ──
   async function addStudent(fields, tierId, cardId) {
+    console.log("[addStudent]", { fields, tierId, cardId, cardOptions, tiers });
     const row = await db.createStudent(fields);
+    console.log("[addStudent] created row:", row);
     if (tierId) await db.upsertMembership(row.id, tierId);
     if (cardId) {
       const opt = cardOptions.find(o => o.id === cardId);
+      console.log("[addStudent] card opt:", opt);
+      if (!opt) throw new Error(`No card option found for id "${cardId}". Available: ${cardOptions.map(o => o.id).join(", ")}`);
       await db.upsertPunchCard(row.id, opt.punches);
       await db.logPunchHistory(row.id, opt.punches, `Initial load: ${opt.label}`);
     }
@@ -994,27 +1020,31 @@ function AdminDashboard({ user }) {
       <div className="app">
         <Sidebar page={page} setPage={setPage} userEmail={user.email} onLogout={() => supabase.auth.signOut()} lang={lang} toggleLang={toggleLang} />
         <div className="main">
-          {dataErr && <div className="notice-err mb16">{T[lang].dbError(dataErr)} <span style={{ cursor: "pointer", textDecoration: "underline" }} onClick={load}>{T[lang].retry}</span></div>}
+          {dataErr  && <div className="notice-err mb16">{T[lang].dbError(dataErr)} <span style={{ cursor: "pointer", textDecoration: "underline" }} onClick={load}>{T[lang].retry}</span></div>}
+          {writeErr && <div className="notice-err mb16" style={{ cursor: "pointer" }} onClick={() => setWriteErr("")}>⚠ Write error (tap to dismiss): {writeErr}</div>}
           {page === "dashboard" && <Dashboard students={students} setPage={setPage} setModal={setModal} setSelectedId={setSelectedId} />}
           {page === "students"  && <StudentsPage students={filtered} search={search} setSearch={setSearch} setSelectedId={setSelectedId} setModal={setModal} />}
-          {page === "entry"     && <EntryPage students={students} processEntry={processEntry} />}
-          {page === "lessons"   && <LessonsPage students={students} logLesson={logLesson} />}
-          {page === "billing"   && <BillingPage students={students} addPunches={addPunches} setMembership={setMembership} removeMembership={removeMembership} />}
+          {page === "entry"     && <EntryPage students={students} processEntry={safe(processEntry)} />}
+          {page === "lessons"   && <LessonsPage students={students} logLesson={safe(logLesson)} />}
+          {page === "billing"   && <BillingPage students={students} addPunches={safe(addPunches)} setMembership={safe(setMembership)} removeMembership={safe(removeMembership)} />}
           {page === "export"    && <ExportPage />}
           {page === "settings"  && <SettingsPage />}
         </div>
       </div>
 
       {modal === "addStudent" && (
-        <AddStudentModal onClose={() => setModal(null)} onAdd={async (fields, tierId, cardId) => { await addStudent(fields, tierId, cardId); setModal(null); }} />
+        <AddStudentModal onClose={() => setModal(null)} onAdd={async (fields, tierId, cardId) => {
+          try { await addStudent(fields, tierId, cardId); setModal(null); }
+          catch (e) { console.error("[addStudent]", e); setWriteErr(e?.message || String(e)); }
+        }} />
       )}
       {modal === "studentDetail" && selectedId && (
         <StudentDetailModal
           student={students.find(s => s.id === selectedId)}
           onClose={() => { setModal(null); setSelectedId(null); }}
-          processEntry={processEntry} logLesson={logLesson}
-          addPunches={addPunches} setMembership={setMembership} removeMembership={removeMembership}
-          deleteStudent={async (id) => { await deleteStudent(id); setModal(null); setSelectedId(null); }}
+          processEntry={safe(processEntry)} logLesson={safe(logLesson)}
+          addPunches={safe(addPunches)} setMembership={safe(setMembership)} removeMembership={safe(removeMembership)}
+          deleteStudent={async (id) => { try { await deleteStudent(id); setModal(null); setSelectedId(null); } catch(e) { setWriteErr(e?.message || String(e)); } }}
         />
       )}
     </LangContext.Provider>

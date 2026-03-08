@@ -8,24 +8,49 @@ const APP_NAME    = "Penas' SurfTrack";
 const APP_TAGLINE = "Surf School Management";
 const CURRENCY    = "€";
 
-const MEMBERSHIP_TIERS = [
+const DEFAULT_MEMBERSHIP_TIERS = [
   { id: "basic",    label: "Basic",    entriesPerWeek: 2, monthlyPrice: 49  },
   { id: "standard", label: "Standard", entriesPerWeek: 4, monthlyPrice: 79  },
   { id: "elite",    label: "Elite",    entriesPerWeek: 7, monthlyPrice: 119 },
 ];
 
-const PUNCH_CARD_OPTIONS = [
+const DEFAULT_PUNCH_CARD_OPTIONS = [
   { id: "card10", label: "10 Punches", punches: 10, price: 90  },
   { id: "card20", label: "20 Punches", punches: 20, price: 160 },
   { id: "card50", label: "50 Punches", punches: 50, price: 350 },
 ];
 
-const LESSON_TYPES = [
+const DEFAULT_LESSON_TYPES = [
   { id: "group",   label: "Group Lesson",   punchCost: 1 },
   { id: "private", label: "Private Lesson", punchCost: 2 },
 ];
 
-const GROUP_CLASSES = ["Beginner Surf", "Intermediate Surf", "Advanced Surf", "Bodyboard", "Ocean Safety", "Yoga"];
+const DEFAULT_GROUP_CLASSES = ["Beginner Surf", "Intermediate Surf", "Advanced Surf", "Bodyboard", "Ocean Safety", "Yoga"];
+
+// Live config context — persisted to localStorage, editable from Settings page
+const ConfigContext = createContext(null);
+
+function useConfig() { return useContext(ConfigContext); }
+
+function ConfigProvider({ children }) {
+  const load = (key, def) => { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : def; } catch { return def; } };
+  const [tiers,        setTiersRaw]   = useState(() => load("st_tiers",   DEFAULT_MEMBERSHIP_TIERS));
+  const [cardOptions,  setCardsRaw]   = useState(() => load("st_cards",   DEFAULT_PUNCH_CARD_OPTIONS));
+  const [lessonTypes,  setLessonsRaw] = useState(() => load("st_lessons", DEFAULT_LESSON_TYPES));
+  const [groupClasses, setClassesRaw] = useState(() => load("st_classes", DEFAULT_GROUP_CLASSES));
+
+  const save = (key, val, setter) => { localStorage.setItem(key, JSON.stringify(val)); setter(val); };
+  const setTiers        = v => save("st_tiers",   v, setTiersRaw);
+  const setCardOptions  = v => save("st_cards",   v, setCardsRaw);
+  const setLessonTypes  = v => save("st_lessons", v, setLessonsRaw);
+  const setGroupClasses = v => save("st_classes", v, setClassesRaw);
+
+  return (
+    <ConfigContext.Provider value={{ tiers, setTiers, cardOptions, setCardOptions, lessonTypes, setLessonTypes, groupClasses, setGroupClasses }}>
+      {children}
+    </ConfigContext.Provider>
+  );
+}
 
 // ─────────────────────────────────────────────
 // TRANSLATIONS
@@ -156,15 +181,36 @@ const T = {
     exportTip: "For full historical data, you can also query directly in Supabase → Table Editor or use the built-in SQL editor to write custom reports.",
     // Settings page
     settingsTitle: "Settings",
-    settingsSub: "Current configuration",
+    settingsSub: "Manage pricing, plans, and class types",
     membershipTiers: "Membership Tiers",
     tiersEditHint: "Edit MEMBERSHIP_TIERS at the top of App.jsx to add or change tiers.",
     punchCardOptions: "Punch Card Options",
     cardsEditHint: "Edit PUNCH_CARD_OPTIONS at the top of App.jsx to add or change amounts.",
     perPunch: (p) => `${CURRENCY}${p} per punch`,
     lessonRules: "Lesson Rules",
+    groupClassesLabel: "Group Class Types",
+    addTier: "+ Add Tier",
+    addCard: "+ Add Card",
+    addClass: "+ Add Class",
+    saveTiers: "Save Tiers",
+    saveCards: "Save Cards",
+    saveLessons: "Save Lessons",
+    saveClasses: "Save Classes",
+    saved: "Saved ✓",
+    labelCol: "Label",
+    sessionsWk: "Sessions/wk",
+    priceCol: "Price (€)",
+    punchesCol: "Punches",
+    punchCostCol: "Punch cost",
+    resetDefaults: "Reset to defaults",
     mo: "/mo",
     month: "/month",
+    // Delete student
+    deleteStudent: "Delete Student",
+    deleteConfirmTitle: "Delete this student?",
+    deleteConfirmText: (name) => `This will permanently delete ${name} and all their entry logs, lessons, and billing history. This cannot be undone.`,
+    deleteConfirm: "Yes, Delete Permanently",
+    deleting: "Deleting…",
     // Student detail modal
     joinedDate: (d) => `Joined ${d}`,
     overview: "overview",
@@ -337,15 +383,36 @@ const T = {
     exportTip: "Para dados históricos completos, consulte diretamente o Supabase → Table Editor ou use o editor SQL para relatórios personalizados.",
     // Settings page
     settingsTitle: "Definições",
-    settingsSub: "Configuração atual",
+    settingsSub: "Gerir preços, planos e tipos de aulas",
     membershipTiers: "Planos de Subscrição",
     tiersEditHint: "Edite MEMBERSHIP_TIERS no topo do App.jsx para adicionar ou alterar planos.",
     punchCardOptions: "Opções de Cartão",
     cardsEditHint: "Edite PUNCH_CARD_OPTIONS no topo do App.jsx para adicionar ou alterar valores.",
     perPunch: (p) => `${CURRENCY}${p} por punção`,
     lessonRules: "Regras de Aulas",
+    groupClassesLabel: "Tipos de Aula de Grupo",
+    addTier: "+ Adicionar Plano",
+    addCard: "+ Adicionar Cartão",
+    addClass: "+ Adicionar Turma",
+    saveTiers: "Guardar Planos",
+    saveCards: "Guardar Cartões",
+    saveLessons: "Guardar Aulas",
+    saveClasses: "Guardar Turmas",
+    saved: "Guardado ✓",
+    labelCol: "Nome",
+    sessionsWk: "Sessões/sem",
+    priceCol: "Preço (€)",
+    punchesCol: "Punções",
+    punchCostCol: "Custo em punções",
+    resetDefaults: "Repor predefinições",
     mo: "/mês",
     month: "/mês",
+    // Delete student
+    deleteStudent: "Eliminar Aluno",
+    deleteConfirmTitle: "Eliminar este aluno?",
+    deleteConfirmText: (name) => `Isto irá eliminar permanentemente ${name} e todos os seus registos de entradas, aulas e faturação. Esta ação não pode ser desfeita.`,
+    deleteConfirm: "Sim, Eliminar Permanentemente",
+    deleting: "A eliminar…",
     // Student detail modal
     joinedDate: (d) => `Inscrito em ${d}`,
     overview: "resumo",
@@ -412,7 +479,7 @@ function getWeekStart() {
   return mon.toISOString();
 }
 function isNewWeek(ws)  { return ws ? new Date(ws) < new Date(getWeekStart()) : true; }
-function getTier(id)    { return MEMBERSHIP_TIERS.find(t => t.id === id); }
+function getTier(id, tiers) { return (tiers || DEFAULT_MEMBERSHIP_TIERS).find(t => t.id === id); }
 function fmt(d)         { return new Date(d).toLocaleDateString("en-GB", { month: "short", day: "numeric", year: "numeric" }); }
 function fmtTime(d)     { return new Date(d).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }); }
 function initials(name) { return name.trim().split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2); }
@@ -729,6 +796,10 @@ const css = `
 // MAIN APP
 // ─────────────────────────────────────────────
 export default function SurfTrackApp() {
+  return <ConfigProvider><SurfTrackInner /></ConfigProvider>;
+}
+
+function SurfTrackInner() {
   const [user, setUser]       = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -784,6 +855,7 @@ function Login() {
 // ADMIN SHELL — loads data, handles all actions
 // ─────────────────────────────────────────────
 function AdminDashboard({ user }) {
+  const { tiers, cardOptions, lessonTypes } = useConfig();
   const [students, setStudents]       = useState([]);
   const [page, setPage]               = useState("dashboard");
   const [selectedId, setSelectedId]   = useState(null);
@@ -811,7 +883,7 @@ function AdminDashboard({ user }) {
     await db.resetWeekIfNeeded(student);
 
     if (student.membership) {
-      const tier  = getTier(student.membership.tierId);
+      const tier  = getTier(student.membership.tierId, tiers);
       const used  = isNewWeek(student.membership.weekStart) ? 0 : student.membership.activeWeekEntries;
       const limit = tier?.entriesPerWeek || 0;
       if (used < limit) {
@@ -839,20 +911,35 @@ function AdminDashboard({ user }) {
   // ── LESSON ──
   async function logLesson(studentId, lessonType, className = "") {
     const student = students.find(s => s.id === studentId);
-    if (!student?.punchCard) return { ok: false, msg: "No punch card." };
-    const lt = LESSON_TYPES.find(l => l.id === lessonType);
+    const lt      = lessonTypes.find(l => l.id === lessonType);
+    const tier    = student?.membership ? getTier(student.membership.tierId, tiers) : null;
+    const weeklyRemaining = tier ? Math.max(0, (tier.entriesPerWeek || 0) - (student.membership.activeWeekEntries || 0)) : 0;
+
+    // Membership first: if they have weekly slots remaining, use one
+    if (weeklyRemaining > 0) {
+      await db.resetWeekIfNeeded(student);
+      const newCount = (student.membership.activeWeekEntries || 0) + 1;
+      await db.incrementWeekEntry(studentId, newCount);
+      await db.logEntry(studentId, "membership", `${lt.label}${className ? `: ${className}` : ""}`, false, "");
+      await db.logLesson(studentId, lessonType, lt.label, className, 0);
+      await load();
+      return { ok: true, method: "membership" };
+    }
+
+    // Punch card fallback
+    if (!student?.punchCard) return { ok: false, msg: "No punch card and no weekly sessions remaining." };
     if (student.punchCard.balance < lt.punchCost) return { ok: false, msg: `Need ${lt.punchCost} punches, have ${student.punchCard.balance}.` };
     const newBal = student.punchCard.balance - lt.punchCost;
     await db.updatePunchBalance(studentId, newBal);
     await db.logPunchHistory(studentId, -lt.punchCost, `${lt.label}${className ? `: ${className}` : ""}`);
     await db.logLesson(studentId, lessonType, lt.label, className, lt.punchCost);
     await load();
-    return { ok: true };
+    return { ok: true, method: "punch_card" };
   }
 
   // ── ADD PUNCHES ──
   async function addPunches(studentId, cardId) {
-    const opt     = PUNCH_CARD_OPTIONS.find(o => o.id === cardId);
+    const opt     = cardOptions.find(o => o.id === cardId);
     const student = students.find(s => s.id === studentId);
     const newBal  = (student?.punchCard?.balance || 0) + opt.punches;
     await db.upsertPunchCard(studentId, newBal);
@@ -871,12 +958,23 @@ function AdminDashboard({ user }) {
     await load();
   }
 
+  // ── DELETE STUDENT ──
+  async function deleteStudent(studentId) {
+    await supabase.from("punch_card_history").delete().eq("student_id", studentId);
+    await supabase.from("lesson_log").delete().eq("student_id", studentId);
+    await supabase.from("entry_log").delete().eq("student_id", studentId);
+    await supabase.from("punch_cards").delete().eq("student_id", studentId);
+    await supabase.from("memberships").delete().eq("student_id", studentId);
+    await supabase.from("students").delete().eq("id", studentId);
+    await load();
+  }
+
   // ── ADD STUDENT ──
   async function addStudent(fields, tierId, cardId) {
     const row = await db.createStudent(fields);
     if (tierId) await db.upsertMembership(row.id, tierId);
     if (cardId) {
-      const opt = PUNCH_CARD_OPTIONS.find(o => o.id === cardId);
+      const opt = cardOptions.find(o => o.id === cardId);
       await db.upsertPunchCard(row.id, opt.punches);
       await db.logPunchHistory(row.id, opt.punches, `Initial load: ${opt.label}`);
     }
@@ -916,6 +1014,7 @@ function AdminDashboard({ user }) {
           onClose={() => { setModal(null); setSelectedId(null); }}
           processEntry={processEntry} logLesson={logLesson}
           addPunches={addPunches} setMembership={setMembership} removeMembership={removeMembership}
+          deleteStudent={async (id) => { await deleteStudent(id); setModal(null); setSelectedId(null); }}
         />
       )}
     </LangContext.Provider>
@@ -960,9 +1059,10 @@ function Sidebar({ page, setPage, userEmail, onLogout, lang, toggleLang }) {
 // ─────────────────────────────────────────────
 function Dashboard({ students, setPage, setModal, setSelectedId }) {
   const t       = useLang();
+  const { tiers } = useConfig();
   const monthly = students.filter(s => s.membership).length;
   const both    = students.filter(s => s.membership && s.punchCard).length;
-  const atLimit = students.filter(s => s.membership && s.membership.activeWeekEntries >= (getTier(s.membership.tierId)?.entriesPerWeek || 0)).length;
+  const atLimit = students.filter(s => s.membership && s.membership.activeWeekEntries >= (getTier(s.membership.tierId, tiers)?.entriesPerWeek || 0)).length;
   const recent  = students.flatMap(s => s.entryLog.map(e => ({ ...e, studentName: s.name }))).sort((a, b) => new Date(b.ts) - new Date(a.ts)).slice(0, 8);
 
   return (
@@ -1000,7 +1100,7 @@ function Dashboard({ students, setPage, setModal, setSelectedId }) {
         <div className="card">
           <div className="card-title">{t.studentOverview}</div>
           {students.map(s => {
-            const tier  = s.membership ? getTier(s.membership.tierId) : null;
+            const tier  = s.membership ? getTier(s.membership.tierId, tiers) : null;
             const used  = s.membership?.activeWeekEntries || 0, limit = tier?.entriesPerWeek || 0;
             const pct   = limit > 0 ? Math.min(100, (used / limit) * 100) : 0;
             return (
@@ -1027,6 +1127,7 @@ function Dashboard({ students, setPage, setModal, setSelectedId }) {
 // ─────────────────────────────────────────────
 function StudentsPage({ students, search, setSearch, setSelectedId, setModal }) {
   const t      = useLang();
+  const { tiers } = useConfig();
   const colors = ["var(--accent)", "var(--gold)", "var(--green)"];
   return (
     <div>
@@ -1041,7 +1142,7 @@ function StudentsPage({ students, search, setSearch, setSelectedId, setModal }) 
         <thead><tr><th>{t.students}</th><th>{t.membership}</th><th>{t.weeklyUsage}</th><th>{t.punchCard}</th><th>{t.status}</th><th></th></tr></thead>
         <tbody>
           {students.map((s, i) => {
-            const tier    = s.membership ? getTier(s.membership.tierId) : null;
+            const tier    = s.membership ? getTier(s.membership.tierId, tiers) : null;
             const used    = s.membership?.activeWeekEntries || 0, limit = tier?.entriesPerWeek || 0;
             const pct     = limit > 0 ? Math.min(100, (used / limit) * 100) : 0;
             const atLimit = tier && used >= limit;
@@ -1067,6 +1168,7 @@ function StudentsPage({ students, search, setSearch, setSelectedId, setModal }) 
 // ─────────────────────────────────────────────
 function EntryPage({ students, processEntry }) {
   const t = useLang();
+  const { tiers } = useConfig();
   const [mode, setMode]         = useState("search");
   const [query, setQuery]       = useState("");
   const [selected, setSelected] = useState(null);
@@ -1120,7 +1222,7 @@ function EntryPage({ students, processEntry }) {
               {students.map(s => (
                 <div key={s.id} className="timeline-item" style={{ marginBottom: 6, cursor: "pointer" }} onClick={() => handleEntry(s.id)}>
                   <div className="avatar" style={{ width: 28, height: 28, fontSize: 10 }}>{s.avatar}</div>
-                  <div className="timeline-info"><div className="timeline-title">{s.name}</div><div className="timeline-time">{s.membership ? getTier(s.membership.tierId)?.label : t.noMembership}{s.punchCard ? ` · ${s.punchCard.balance}p` : ""}</div></div>
+                  <div className="timeline-info"><div className="timeline-title">{s.name}</div><div className="timeline-time">{s.membership ? getTier(s.membership.tierId, tiers)?.label : t.noMembership}{s.punchCard ? ` · ${s.punchCard.balance}p` : ""}</div></div>
                 </div>
               ))}
             </div>
@@ -1168,13 +1270,14 @@ function EntryPage({ students, processEntry }) {
 // ─────────────────────────────────────────────
 function LessonsPage({ students, logLesson }) {
   const t = useLang();
+  const { lessonTypes, groupClasses, tiers, cardOptions } = useConfig();
   const [selId, setSelId]           = useState("");
   const [lessonType, setLessonType] = useState("group");
-  const [cls, setCls]               = useState(GROUP_CLASSES[0]);
+  const [cls, setCls]               = useState(groupClasses[0] || "");
   const [result, setResult]         = useState(null);
   const [busy, setBusy]             = useState(false);
   const student    = students.find(s => s.id === selId);
-  const lt         = LESSON_TYPES.find(l => l.id === lessonType);
+  const lt         = lessonTypes.find(l => l.id === lessonType);
   const allLessons = students.flatMap(s => s.lessonHistory.map(l => ({ ...l, studentName: s.name }))).sort((a, b) => new Date(b.ts) - new Date(a.ts)).slice(0, 20);
 
   return (
@@ -1187,16 +1290,30 @@ function LessonsPage({ students, logLesson }) {
           <div className="field"><label>{t.students}</label>
             <select value={selId} onChange={e => { setSelId(e.target.value); setResult(null); }}>
               <option value="">{t.selectStudent}</option>
-              {students.filter(s => s.punchCard).map(s => <option key={s.id} value={s.id}>{s.name} ({s.punchCard.balance}p)</option>)}
+              {students.filter(s => s.punchCard || s.membership).map(s => {
+                const tier = s.membership ? getTier(s.membership.tierId, tiers) : null;
+                const remaining = tier ? Math.max(0, tier.entriesPerWeek - (s.membership.activeWeekEntries || 0)) : 0;
+                const info = s.punchCard && tier ? `${remaining} sessions + ${s.punchCard.balance}p` : s.punchCard ? `${s.punchCard.balance}p` : `${remaining} sessions`;
+                return <option key={s.id} value={s.id}>{s.name} ({info})</option>;
+              })}
             </select>
           </div>
           <div className="field"><label>{t.lessonType}</label>
             <div className="grid2" style={{ marginTop: 4 }}>
-              {LESSON_TYPES.map(l => <div key={l.id} className={`opt-card ${lessonType === l.id ? "selected" : ""}`} onClick={() => setLessonType(l.id)}><div className="opt-card-label">{l.label}</div><div className="opt-card-sub">{l.punchCost} {l.punchCost > 1 ? t.punches2 : t.punch}</div></div>)}
+              {lessonTypes.map(l => <div key={l.id} className={`opt-card ${lessonType === l.id ? "selected" : ""}`} onClick={() => setLessonType(l.id)}><div className="opt-card-label">{l.label}</div><div className="opt-card-sub">{l.punchCost} {l.punchCost > 1 ? t.punches2 : t.punch}</div></div>)}
             </div>
           </div>
-          {lessonType === "group" && <div className="field"><label>{t.class}</label><select value={cls} onChange={e => setCls(e.target.value)}>{GROUP_CLASSES.map(g => <option key={g}>{g}</option>)}</select></div>}
-          {student && lt && <div className={student.punchCard.balance >= lt.punchCost ? "notice" : "notice-warn"}>{student.punchCard.balance >= lt.punchCost ? t.punchesAvailable(student.punchCard.balance, student.name) : t.notEnoughPunches(lt.punchCost, student.punchCard.balance)}</div>}
+          {lessonType === "group" && <div className="field"><label>{t.class}</label><select value={cls} onChange={e => setCls(e.target.value)}>{groupClasses.map(g => <option key={g}>{g}</option>)}</select></div>}
+          {student && lt && (() => {
+            const tier2 = student.membership ? getTier(student.membership.tierId, tiers) : null;
+            const wLeft = tier2 ? Math.max(0, tier2.entriesPerWeek - (student.membership.activeWeekEntries || 0)) : 0;
+            const pBal = student.punchCard?.balance || 0;
+            const canBook = wLeft > 0 || pBal >= lt.punchCost;
+            const msg = canBook
+              ? wLeft > 0 ? `✓ ${student.name} has ${wLeft} weekly session${wLeft !== 1 ? "s" : ""} remaining.` : t.punchesAvailable(pBal, student.name)
+              : pBal > 0 ? t.notEnoughPunches(lt.punchCost, pBal) : "✗ No weekly sessions remaining and no punch card.";
+            return <div className={canBook ? "notice" : "notice-warn"}>{msg}</div>;
+          })()}
           <button className="btn btn-primary btn-full" disabled={!selId || busy} onClick={async () => { setBusy(true); setResult(await logLesson(selId, lessonType, lessonType === "group" ? cls : "")); setBusy(false); }}>{busy ? t.saving : t.logLessonBtn}</button>
           {result && <div className={`entry-result mt16 ${result.ok ? "entry-allowed" : "entry-denied"}`}><div className="entry-msg" style={{ color: result.ok ? "var(--green)" : "var(--red)" }}>{result.ok ? t.lessonRecorded : result.msg}</div></div>}
         </div>
@@ -1222,31 +1339,31 @@ function LessonsPage({ students, logLesson }) {
 // BILLING PAGE
 // ─────────────────────────────────────────────
 // Returns the euro value of punch cards sold to a student THIS calendar month
-function punchRevenueThisMonth(student) {
+function punchRevenueThisMonth(student, cardOptions) {
   const now   = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth(), 1); // 1st of this month, midnight
+  const start = new Date(now.getFullYear(), now.getMonth(), 1);
   return (student.punchHistory || [])
     .filter(h => h.delta > 0 && new Date(h.ts) >= start)
     .reduce((sum, h) => {
-      // Match the loaded punches back to a card option to get the price paid
-      const opt = PUNCH_CARD_OPTIONS.find(o => o.punches === h.delta);
+      const opt = cardOptions.find(o => o.punches === h.delta);
       return sum + (opt ? opt.price : 0);
     }, 0);
 }
 
 function BillingPage({ students, addPunches, setMembership, removeMembership }) {
   const t = useLang();
+  const { tiers, cardOptions } = useConfig();
   const [selId, setSelId]   = useState("");
-  const [cardId, setCardId] = useState(PUNCH_CARD_OPTIONS[0].id);
-  const [tierId, setTierId] = useState(MEMBERSHIP_TIERS[0].id);
+  const [cardId, setCardId] = useState(cardOptions[0]?.id || "");
+  const [tierId, setTierId] = useState(tiers[0]?.id || "");
   const [action, setAction] = useState("loadCard");
   const [msg, setMsg]       = useState("");
   const [busy, setBusy]     = useState(false);
   const flash = m => { setMsg(m); setTimeout(() => setMsg(""), 3000); };
 
   const monthLabel      = t.monthLabel();
-  const totalMembership = students.reduce((sum, s) => sum + (getTier(s.membership?.tierId)?.monthlyPrice || 0), 0);
-  const totalPunchCards = students.reduce((sum, s) => sum + punchRevenueThisMonth(s), 0);
+  const totalMembership = students.reduce((sum, s) => sum + (getTier(s.membership?.tierId, tiers)?.monthlyPrice || 0), 0);
+  const totalPunchCards = students.reduce((sum, s) => sum + punchRevenueThisMonth(s, cardOptions), 0);
   const totalRevenue    = totalMembership + totalPunchCards;
 
   return (
@@ -1267,12 +1384,12 @@ function BillingPage({ students, addPunches, setMembership, removeMembership }) 
           </div>
           {action === "loadCard" && (<>
             <div className="section-label">{t.selectAmount}</div>
-            <div className="grid3" style={{ marginBottom: 16 }}>{PUNCH_CARD_OPTIONS.map(o => <div key={o.id} className={`opt-card ${cardId === o.id ? "selected" : ""}`} onClick={() => setCardId(o.id)}><div className="opt-card-label">{o.punches}p</div><div className="opt-card-sub">{CURRENCY}{o.price}</div></div>)}</div>
+            <div className="grid3" style={{ marginBottom: 16 }}>{cardOptions.map(o => <div key={o.id} className={`opt-card ${cardId === o.id ? "selected" : ""}`} onClick={() => setCardId(o.id)}><div className="opt-card-label">{o.punches}p</div><div className="opt-card-sub">{CURRENCY}{o.price}</div></div>)}</div>
             <button className="btn btn-primary btn-full" disabled={!selId || busy} onClick={async () => { setBusy(true); await addPunches(selId, cardId); flash(t.cardLoaded); setBusy(false); }}>{busy ? t.saving : t.loadCard}</button>
           </>)}
           {action === "membership" && (<>
             <div className="section-label">{t.selectTier}</div>
-            {MEMBERSHIP_TIERS.map(tier => <div key={tier.id} className={`opt-card ${tierId === tier.id ? "selected" : ""}`} style={{ marginBottom: 8 }} onClick={() => setTierId(tier.id)}><div className="opt-card-label">{tier.label} — {t.sessionsPerWeek(tier.entriesPerWeek)}</div><div className="opt-card-sub">{CURRENCY}{tier.monthlyPrice}{t.mo}</div></div>)}
+            {tiers.map(tier => <div key={tier.id} className={`opt-card ${tierId === tier.id ? "selected" : ""}`} style={{ marginBottom: 8 }} onClick={() => setTierId(tier.id)}><div className="opt-card-label">{tier.label} — {t.sessionsPerWeek(tier.entriesPerWeek)}</div><div className="opt-card-sub">{CURRENCY}{tier.monthlyPrice}{t.mo}</div></div>)}
             <div className="row gap8 mt16">
               <button className="btn btn-primary" disabled={!selId || busy} onClick={async () => { setBusy(true); await setMembership(selId, tierId); flash(t.membershipUpdated); setBusy(false); }}>{busy ? t.saving : t.updateMembership}</button>
               {selId && students.find(s => s.id === selId)?.membership && <button className="btn btn-danger" onClick={async () => { await removeMembership(selId); flash(t.membershipRemoved); }}>{t.removeMembership}</button>}
@@ -1287,8 +1404,8 @@ function BillingPage({ students, addPunches, setMembership, removeMembership }) 
             <thead><tr><th>{t.students}</th><th>{t.membership}</th><th style={{ textAlign: "right" }}>{t.membershipFee}</th><th style={{ textAlign: "right" }}>{t.cardsThisMonth}</th></tr></thead>
             <tbody>
               {students.map(s => {
-                const tier = s.membership ? getTier(s.membership.tierId) : null;
-                const cardRevenue = punchRevenueThisMonth(s);
+                const tier = s.membership ? getTier(s.membership.tierId, tiers) : null;
+                const cardRevenue = punchRevenueThisMonth(s, cardOptions);
                 return (
                   <tr key={s.id}>
                     <td><div className="bold small">{s.name}</div></td>
@@ -1358,23 +1475,129 @@ function ExportPage() {
 // ─────────────────────────────────────────────
 function SettingsPage() {
   const t = useLang();
+  const { tiers, setTiers, cardOptions, setCardOptions, lessonTypes, setLessonTypes, groupClasses, setGroupClasses } = useConfig();
+  const [savedSection, setSavedSection] = useState("");
+  const [localTiers,   setLocalTiers]   = useState(() => JSON.parse(JSON.stringify(tiers)));
+  const [localCards,   setLocalCards]   = useState(() => JSON.parse(JSON.stringify(cardOptions)));
+  const [localLessons, setLocalLessons] = useState(() => JSON.parse(JSON.stringify(lessonTypes)));
+  const [localClasses, setLocalClasses] = useState(() => [...groupClasses]);
+
+  const flash = (s) => { setSavedSection(s); setTimeout(() => setSavedSection(""), 2000); };
+
+  // Tiers
+  const updateTier  = (i, k, v) => { const n = [...localTiers]; n[i] = { ...n[i], [k]: k === "label" ? v : Number(v) }; setLocalTiers(n); };
+  const removeTier  = (i) => setLocalTiers(localTiers.filter((_, j) => j !== i));
+  const addTier     = () => setLocalTiers([...localTiers, { id: `tier${Date.now()}`, label: "New Tier", entriesPerWeek: 3, monthlyPrice: 60 }]);
+  const saveTiers   = () => { setTiers(localTiers); flash("tiers"); };
+
+  // Cards
+  const updateCard  = (i, k, v) => { const n = [...localCards]; n[i] = { ...n[i], [k]: k === "label" ? v : Number(v) }; setLocalCards(n); };
+  const removeCard  = (i) => setLocalCards(localCards.filter((_, j) => j !== i));
+  const addCard     = () => setLocalCards([...localCards, { id: `card${Date.now()}`, label: "New Card", punches: 10, price: 80 }]);
+  const saveCards   = () => { setCardOptions(localCards); flash("cards"); };
+
+  // Lesson types
+  const updateLesson  = (i, k, v) => { const n = [...localLessons]; n[i] = { ...n[i], [k]: k === "label" ? v : Number(v) }; setLocalLessons(n); };
+  const saveLessons   = () => { setLessonTypes(localLessons); flash("lessons"); };
+
+  // Group classes
+  const updateClass  = (i, v) => { const n = [...localClasses]; n[i] = v; setLocalClasses(n); };
+  const removeClass  = (i) => setLocalClasses(localClasses.filter((_, j) => j !== i));
+  const addCls       = () => setLocalClasses([...localClasses, ""]);
+  const saveClasses  = () => { setGroupClasses(localClasses.filter(c => c.trim())); flash("classes"); };
+
+  const inputStyle = { background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 6, padding: "5px 8px", color: "var(--text)", fontFamily: "var(--font-body)", fontSize: 12, outline: "none", width: "100%" };
+  const SaveBtn = ({ section, onSave, label }) => (
+    <button className="btn btn-primary" style={{ fontSize: 12, padding: "6px 14px" }} onClick={onSave}>
+      {savedSection === section ? t.saved : label}
+    </button>
+  );
+
   return (
     <div>
       <div className="page-header"><div><div className="page-title">{t.settingsTitle}</div><div className="page-sub">{t.settingsSub}</div></div></div>
       <div className="grid2" style={{ gap: 20 }}>
+
+        {/* Membership Tiers */}
         <div className="card">
-          <div className="card-title">{t.membershipTiers}</div>
-          <div className="notice">{t.tiersEditHint}</div>
-          {MEMBERSHIP_TIERS.map(tier => <div key={tier.id} style={{ padding: "12px 0", borderBottom: "1px solid var(--border)" }}><div className="flex justify-between items-center"><div><div className="bold">{tier.label}</div><div className="small text-muted">{t.sessionsPerWeek(tier.entriesPerWeek)}</div></div><div className="text-accent bold">{CURRENCY}{tier.monthlyPrice}{t.mo}</div></div></div>)}
+          <div className="flex justify-between items-center" style={{ marginBottom: 14 }}>
+            <div className="card-title" style={{ margin: 0 }}>{t.membershipTiers}</div>
+            <SaveBtn section="tiers" onSave={saveTiers} label={t.saveTiers} />
+          </div>
+          {localTiers.map((tier, i) => (
+            <div key={tier.id} style={{ display: "grid", gridTemplateColumns: "1fr 80px 80px 28px", gap: 6, marginBottom: 8, alignItems: "center" }}>
+              <input style={inputStyle} value={tier.label} onChange={e => updateTier(i, "label", e.target.value)} placeholder={t.labelCol} />
+              <input style={inputStyle} type="number" value={tier.entriesPerWeek} onChange={e => updateTier(i, "entriesPerWeek", e.target.value)} placeholder={t.sessionsWk} min={1} />
+              <input style={inputStyle} type="number" value={tier.monthlyPrice} onChange={e => updateTier(i, "monthlyPrice", e.target.value)} placeholder={t.priceCol} min={0} />
+              <button onClick={() => removeTier(i)} style={{ background: "none", border: "none", color: "var(--red)", cursor: "pointer", fontSize: 16, lineHeight: 1 }}>×</button>
+            </div>
+          ))}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 80px 80px 28px", gap: 6, marginBottom: 8 }}>
+            <div style={{ fontSize: 10, color: "var(--muted)", paddingLeft: 2 }}>{t.labelCol}</div>
+            <div style={{ fontSize: 10, color: "var(--muted)", paddingLeft: 2 }}>{t.sessionsWk}</div>
+            <div style={{ fontSize: 10, color: "var(--muted)", paddingLeft: 2 }}>{t.priceCol}</div>
+            <div />
+          </div>
+          <button className="btn btn-ghost" style={{ fontSize: 12, padding: "5px 12px" }} onClick={addTier}>{t.addTier}</button>
         </div>
+
+        {/* Punch Card Options */}
         <div className="card">
-          <div className="card-title">{t.punchCardOptions}</div>
-          <div className="notice">{t.cardsEditHint}</div>
-          {PUNCH_CARD_OPTIONS.map(o => <div key={o.id} style={{ padding: "12px 0", borderBottom: "1px solid var(--border)" }}><div className="flex justify-between items-center"><div><div className="bold">{o.label}</div><div className="small text-muted">{t.perPunch((o.price / o.punches).toFixed(2))}</div></div><div className="text-accent bold">{CURRENCY}{o.price}</div></div></div>)}
-          <div className="separator" />
-          <div className="section-label">{t.lessonRules}</div>
-          {LESSON_TYPES.map(l => <div key={l.id} style={{ padding: "8px 0" }} className="flex justify-between"><span>{l.label}</span><span className="badge badge-blue">{l.punchCost} {l.punchCost > 1 ? t.punches2 : t.punch}</span></div>)}
+          <div className="flex justify-between items-center" style={{ marginBottom: 14 }}>
+            <div className="card-title" style={{ margin: 0 }}>{t.punchCardOptions}</div>
+            <SaveBtn section="cards" onSave={saveCards} label={t.saveCards} />
+          </div>
+          {localCards.map((card, i) => (
+            <div key={card.id} style={{ display: "grid", gridTemplateColumns: "1fr 80px 80px 28px", gap: 6, marginBottom: 8, alignItems: "center" }}>
+              <input style={inputStyle} value={card.label} onChange={e => updateCard(i, "label", e.target.value)} placeholder={t.labelCol} />
+              <input style={inputStyle} type="number" value={card.punches} onChange={e => updateCard(i, "punches", e.target.value)} placeholder={t.punchesCol} min={1} />
+              <input style={inputStyle} type="number" value={card.price} onChange={e => updateCard(i, "price", e.target.value)} placeholder={t.priceCol} min={0} />
+              <button onClick={() => removeCard(i)} style={{ background: "none", border: "none", color: "var(--red)", cursor: "pointer", fontSize: 16, lineHeight: 1 }}>×</button>
+            </div>
+          ))}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 80px 80px 28px", gap: 6, marginBottom: 8 }}>
+            <div style={{ fontSize: 10, color: "var(--muted)", paddingLeft: 2 }}>{t.labelCol}</div>
+            <div style={{ fontSize: 10, color: "var(--muted)", paddingLeft: 2 }}>{t.punchesCol}</div>
+            <div style={{ fontSize: 10, color: "var(--muted)", paddingLeft: 2 }}>{t.priceCol}</div>
+            <div />
+          </div>
+          <button className="btn btn-ghost" style={{ fontSize: 12, padding: "5px 12px" }} onClick={addCard}>{t.addCard}</button>
         </div>
+
+        {/* Lesson Types */}
+        <div className="card">
+          <div className="flex justify-between items-center" style={{ marginBottom: 14 }}>
+            <div className="card-title" style={{ margin: 0 }}>{t.lessonRules}</div>
+            <SaveBtn section="lessons" onSave={saveLessons} label={t.saveLessons} />
+          </div>
+          {localLessons.map((l, i) => (
+            <div key={l.id} style={{ display: "grid", gridTemplateColumns: "1fr 100px", gap: 8, marginBottom: 8, alignItems: "center" }}>
+              <input style={inputStyle} value={l.label} onChange={e => updateLesson(i, "label", e.target.value)} placeholder={t.labelCol} />
+              <input style={inputStyle} type="number" value={l.punchCost} onChange={e => updateLesson(i, "punchCost", e.target.value)} placeholder={t.punchCostCol} min={0} />
+            </div>
+          ))}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 100px", gap: 8, marginBottom: 8 }}>
+            <div style={{ fontSize: 10, color: "var(--muted)", paddingLeft: 2 }}>{t.labelCol}</div>
+            <div style={{ fontSize: 10, color: "var(--muted)", paddingLeft: 2 }}>{t.punchCostCol}</div>
+          </div>
+          <div className="notice-warn" style={{ marginTop: 8, marginBottom: 0, fontSize: 11 }}>Punch cost = 0 means the lesson uses a weekly membership session instead.</div>
+        </div>
+
+        {/* Group Class Types */}
+        <div className="card">
+          <div className="flex justify-between items-center" style={{ marginBottom: 14 }}>
+            <div className="card-title" style={{ margin: 0 }}>{t.groupClassesLabel}</div>
+            <SaveBtn section="classes" onSave={saveClasses} label={t.saveClasses} />
+          </div>
+          {localClasses.map((cls, i) => (
+            <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 28px", gap: 6, marginBottom: 8, alignItems: "center" }}>
+              <input style={inputStyle} value={cls} onChange={e => updateClass(i, e.target.value)} />
+              <button onClick={() => removeClass(i)} style={{ background: "none", border: "none", color: "var(--red)", cursor: "pointer", fontSize: 16, lineHeight: 1 }}>×</button>
+            </div>
+          ))}
+          <button className="btn btn-ghost" style={{ fontSize: 12, padding: "5px 12px" }} onClick={addCls}>{t.addClass}</button>
+        </div>
+
       </div>
     </div>
   );
@@ -1383,26 +1606,28 @@ function SettingsPage() {
 // ─────────────────────────────────────────────
 // STUDENT DETAIL MODAL
 // ─────────────────────────────────────────────
-function StudentDetailModal({ student, onClose, processEntry, logLesson, addPunches, setMembership, removeMembership }) {
+function StudentDetailModal({ student, onClose, processEntry, logLesson, addPunches, setMembership, removeMembership, deleteStudent }) {
   const t = useLang();
+  const { lessonTypes, groupClasses, tiers, cardOptions } = useConfig();
   const [tab, setTab]               = useState("overview");
   const [result, setResult]         = useState(null);
   const [lessonType, setLessonType] = useState("group");
-  const [cls, setCls]               = useState(GROUP_CLASSES[0]);
+  const [cls, setCls]               = useState(groupClasses[0] || "");
   const [isGuest, setIsGuest]       = useState(false);
   const [guestName, setGuestName]   = useState("");
-  const [cardId, setCardId]         = useState(PUNCH_CARD_OPTIONS[0].id);
-  const [newTier, setNewTier]       = useState(student?.membership?.tierId || MEMBERSHIP_TIERS[0].id);
+  const [cardId, setCardId]         = useState(cardOptions[0]?.id || "");
+  const [newTier, setNewTier]       = useState(student?.membership?.tierId || tiers[0]?.id || "");
   const [msg, setMsg]               = useState("");
   const [busy, setBusy]             = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const flash = m => { setMsg(m); setTimeout(() => setMsg(""), 3000); };
 
   if (!student) return null;
-  const tier  = student.membership ? getTier(student.membership.tierId) : null;
+  const tier  = student.membership ? getTier(student.membership.tierId, tiers) : null;
   const used  = student.membership?.activeWeekEntries || 0;
   const limit = tier?.entriesPerWeek || 0;
   const pct   = limit > 0 ? Math.min(100, (used / limit) * 100) : 0;
-  const lt    = LESSON_TYPES.find(l => l.id === lessonType);
+  const lt    = lessonTypes.find(l => l.id === lessonType);
 
   const tabKeys = ["overview", "qr code", "entry", "lessons", "billing", "history"];
   const tabLabels = { "overview": t.overview, "qr code": t.qrCode, "entry": t.entry, "lessons": t.lessons, "billing": t.billing, "history": t.history };
@@ -1446,6 +1671,18 @@ function StudentDetailModal({ student, onClose, processEntry, logLesson, addPunc
               : student.punchCard ? t.punchCardOnly(student.punchCard.balance)
               : t.noPlanDenied}
           </div>
+          <div className="separator" />
+          {!confirmDelete
+            ? <button className="btn btn-danger" style={{ fontSize: 12 }} onClick={() => setConfirmDelete(true)}>{t.deleteStudent}</button>
+            : <div className="notice-err">
+                <div className="bold" style={{ marginBottom: 6 }}>{t.deleteConfirmTitle}</div>
+                <div style={{ fontSize: 12, marginBottom: 12 }}>{t.deleteConfirmText(student.name)}</div>
+                <div className="row gap8">
+                  <button className="btn btn-danger" disabled={busy} onClick={async () => { setBusy(true); await deleteStudent(student.id); }}>{busy ? t.deleting : t.deleteConfirm}</button>
+                  <button className="btn btn-ghost" onClick={() => setConfirmDelete(false)}>{t.cancel}</button>
+                </div>
+              </div>
+          }
         </>)}
 
         {tab === "qr code" && (<>
@@ -1470,22 +1707,22 @@ function StudentDetailModal({ student, onClose, processEntry, logLesson, addPunc
         </>)}
 
         {tab === "lessons" && (<>
-          {!student.punchCard && <div className="notice-warn">{t.studentNeedsPunchCard}</div>}
+          {!student.punchCard && !student.membership && <div className="notice-warn">{t.studentNeedsPunchCard}</div>}
           <div className="grid2" style={{ marginBottom: 12 }}>
-            {LESSON_TYPES.map(l => <div key={l.id} className={`opt-card ${lessonType === l.id ? "selected" : ""}`} onClick={() => setLessonType(l.id)}><div className="opt-card-label">{l.label}</div><div className="opt-card-sub">{l.punchCost} {l.punchCost > 1 ? t.punches2 : t.punch}</div></div>)}
+            {lessonTypes.map(l => <div key={l.id} className={`opt-card ${lessonType === l.id ? "selected" : ""}`} onClick={() => setLessonType(l.id)}><div className="opt-card-label">{l.label}</div><div className="opt-card-sub">{l.punchCost} {l.punchCost > 1 ? t.punches2 : t.punch}</div></div>)}
           </div>
-          {lessonType === "group" && <div className="field"><label>{t.class}</label><select value={cls} onChange={e => setCls(e.target.value)}>{GROUP_CLASSES.map(g => <option key={g}>{g}</option>)}</select></div>}
+          {lessonType === "group" && <div className="field"><label>{t.class}</label><select value={cls} onChange={e => setCls(e.target.value)}>{groupClasses.map(g => <option key={g}>{g}</option>)}</select></div>}
           {student.punchCard && lt && <div className={student.punchCard.balance >= lt.punchCost ? "notice" : "notice-warn"} style={{ marginBottom: 12 }}>{student.punchCard.balance >= lt.punchCost ? t.punchesAvailable(student.punchCard.balance, student.name) : t.notEnoughPunches(lt.punchCost, student.punchCard.balance)}</div>}
-          <button className="btn btn-primary btn-full" disabled={!student.punchCard || busy} onClick={async () => { setBusy(true); const r = await logLesson(student.id, lessonType, lessonType === "group" ? cls : ""); flash(r.ok ? t.lessonRecorded : `✗ ${r.msg}`); setBusy(false); }}>{busy ? t.saving : t.logLessonBtn}</button>
+          <button className="btn btn-primary btn-full" disabled={(!student.punchCard && !student.membership) || busy} onClick={async () => { setBusy(true); const r = await logLesson(student.id, lessonType, lessonType === "group" ? cls : ""); flash(r.ok ? t.lessonRecorded : `✗ ${r.msg}`); setBusy(false); }}>{busy ? t.saving : t.logLessonBtn}</button>
         </>)}
 
         {tab === "billing" && (<>
           <div className="section-label">{t.loadPunchCard}</div>
-          <div className="grid3" style={{ marginBottom: 16 }}>{PUNCH_CARD_OPTIONS.map(o => <div key={o.id} className={`opt-card ${cardId === o.id ? "selected" : ""}`} onClick={() => setCardId(o.id)}><div className="opt-card-label">{o.punches}p</div><div className="opt-card-sub">{CURRENCY}{o.price}</div></div>)}</div>
+          <div className="grid3" style={{ marginBottom: 16 }}>{cardOptions.map(o => <div key={o.id} className={`opt-card ${cardId === o.id ? "selected" : ""}`} onClick={() => setCardId(o.id)}><div className="opt-card-label">{o.punches}p</div><div className="opt-card-sub">{CURRENCY}{o.price}</div></div>)}</div>
           <button className="btn btn-primary btn-full mb16" disabled={busy} onClick={async () => { setBusy(true); await addPunches(student.id, cardId); flash(t.punchesLoaded); setBusy(false); }}>{busy ? t.saving : t.loadPunches}</button>
           <div className="separator" />
           <div className="section-label">{t.membershipTier}</div>
-          {MEMBERSHIP_TIERS.map(tier => <div key={tier.id} className={`opt-card ${newTier === tier.id ? "selected" : ""}`} style={{ marginBottom: 8 }} onClick={() => setNewTier(tier.id)}><div className="opt-card-label">{tier.label} — {t.sessionsPerWeek(tier.entriesPerWeek)}</div><div className="opt-card-sub">{CURRENCY}{tier.monthlyPrice}{t.mo}</div></div>)}
+          {tiers.map(tier => <div key={tier.id} className={`opt-card ${newTier === tier.id ? "selected" : ""}`} style={{ marginBottom: 8 }} onClick={() => setNewTier(tier.id)}><div className="opt-card-label">{tier.label} — {t.sessionsPerWeek(tier.entriesPerWeek)}</div><div className="opt-card-sub">{CURRENCY}{tier.monthlyPrice}{t.mo}</div></div>)}
           <div className="row gap8 mt16">
             <button className="btn btn-primary" disabled={busy} onClick={async () => { setBusy(true); await setMembership(student.id, newTier); flash(t.membershipUpdated); setBusy(false); }}>{t.updateMembership}</button>
             {student.membership && <button className="btn btn-danger" onClick={async () => { await removeMembership(student.id); flash(t.membershipRemoved); }}>{t.removeMembership}</button>}
@@ -1526,14 +1763,15 @@ function StudentDetailModal({ student, onClose, processEntry, logLesson, addPunc
 // ─────────────────────────────────────────────
 function AddStudentModal({ onClose, onAdd }) {
   const t = useLang();
+  const { tiers, cardOptions } = useConfig();
   const [name, setName]     = useState("");
   const [email, setEmail]   = useState("");
   const [phone, setPhone]   = useState("");
   const [notes, setNotes]   = useState("");
   const [hasM, setHasM]     = useState(false);
-  const [tierId, setTierId] = useState(MEMBERSHIP_TIERS[0].id);
+  const [tierId, setTierId] = useState(tiers[0]?.id || "");
   const [hasP, setHasP]     = useState(false);
-  const [cardId, setCardId] = useState(PUNCH_CARD_OPTIONS[0].id);
+  const [cardId, setCardId] = useState(cardOptions[0]?.id || "");
   const [err, setErr]       = useState("");
   const [busy, setBusy]     = useState(false);
 
@@ -1558,11 +1796,11 @@ function AddStudentModal({ onClose, onAdd }) {
         <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", marginBottom: 12 }}>
           <input type="checkbox" checked={hasM} onChange={e => setHasM(e.target.checked)} /><span className="bold">{t.addMonthlyMembership}</span>
         </label>
-        {hasM && <div style={{ marginBottom: 16 }}>{MEMBERSHIP_TIERS.map(tier => <div key={tier.id} className={`opt-card ${tierId === tier.id ? "selected" : ""}`} style={{ marginBottom: 6 }} onClick={() => setTierId(tier.id)}><div className="opt-card-label">{tier.label} — {t.sessionsPerWeek(tier.entriesPerWeek)}</div><div className="opt-card-sub">{CURRENCY}{tier.monthlyPrice}{t.month}</div></div>)}</div>}
+        {hasM && <div style={{ marginBottom: 16 }}>{tiers.map(tier => <div key={tier.id} className={`opt-card ${tierId === tier.id ? "selected" : ""}`} style={{ marginBottom: 6 }} onClick={() => setTierId(tier.id)}><div className="opt-card-label">{tier.label} — {t.sessionsPerWeek(tier.entriesPerWeek)}</div><div className="opt-card-sub">{CURRENCY}{tier.monthlyPrice}{t.month}</div></div>)}</div>}
         <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", marginBottom: 12 }}>
           <input type="checkbox" checked={hasP} onChange={e => setHasP(e.target.checked)} /><span className="bold">{t.addPunchCard}</span>
         </label>
-        {hasP && <div className="grid3" style={{ marginBottom: 16 }}>{PUNCH_CARD_OPTIONS.map(o => <div key={o.id} className={`opt-card ${cardId === o.id ? "selected" : ""}`} onClick={() => setCardId(o.id)}><div className="opt-card-label">{o.punches} {t.punches2}</div><div className="opt-card-sub">{CURRENCY}{o.price}</div></div>)}</div>}
+        {hasP && <div className="grid3" style={{ marginBottom: 16 }}>{cardOptions.map(o => <div key={o.id} className={`opt-card ${cardId === o.id ? "selected" : ""}`} onClick={() => setCardId(o.id)}><div className="opt-card-label">{o.punches} {t.punches2}</div><div className="opt-card-sub">{CURRENCY}{o.price}</div></div>)}</div>}
         {err && <div className="err mb16">{err}</div>}
         <div className="row gap8">
           <button className="btn btn-primary" disabled={busy} onClick={submit}>{busy ? t.creating : t.createStudent}</button>
